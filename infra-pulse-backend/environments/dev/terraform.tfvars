@@ -1,0 +1,16 @@
+aws_region           = "us-east-1"
+assume_role_arn      = "arn:aws:iam::767397709508:role/pw-role-dev-crossaccount_infra_role"
+env                  = "dev"
+project_name         = "pw"
+certificate_arn      = "arn:aws:acm:us-east-1:767397709508:certificate/b6dca4cb-7e75-4ba8-8e2c-cec47b4f18e6"
+desired_count        = "1"
+max_task_count       = "2"
+min_task_count       = "1"
+cpu_target_value     = "70"
+memory_target_value  = "70"
+tags = {
+  map-migrated = "migSZUDBD3OY2"
+  project      = "pw"
+  track        = "pulse"
+  env          = "dev"
+}

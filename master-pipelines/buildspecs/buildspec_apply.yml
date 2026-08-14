@@ -1,0 +1,31 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Downloading and installing Terraform..."
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.9.5/terraform_1.9.5_linux_amd64.zip
+      - unzip -o terraform.zip
+      - mv terraform /usr/local/bin/
+      # - sudo yum install -y yum-utils shadow-utils
+      # - sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+      # - sudo yum -y install terraform
+      - terraform --version  # Verify Terraform installation
+
+  pre_build:
+    commands:
+      - echo "Running Terraform apply"
+  build:
+    commands:
+      
+      # - terraform plan  -out=tfplan
+
+      - terraform apply -auto-approve
+
+
+
+artifacts:
+  files:
+    - '**/*'
+  name: pipeline-infra-$(date +%Y-%m-%d)
+  discard-paths: no

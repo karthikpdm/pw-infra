@@ -1,0 +1,33 @@
+# modules/cognito_identity_pool/variables.tf
+
+variable "identity_pool_name" {
+  description = "The name of the Cognito Identity Pool"
+  type        = string
+}
+
+variable "allow_unauthenticated_identities" {
+  description = "Allow unauthenticated identities in the Cognito Identity Pool"
+  type        = bool
+}
+
+variable "identity_pool_role_name" {
+  description = "Name of the IAM role to use with the Cognito Identity Pool"
+  type        = string
+}
+
+variable "log_retention_days" {
+  description = "Number of days to retain CloudWatch logs"
+  type        = number
+  default     = 60
+}
+
+variable "region" {
+  description = "The AWS region where resources are created"
+  type        = string
+  default     = "us-east-1"  # Change to your default region if needed
+}
+
+variable "tags" {
+  description = "Tags to apply to resources"
+  type        = map(string)
+}

@@ -1,0 +1,228 @@
+version: 0.2
+phases:
+ build:
+   commands:
+     - echo "Logging in to AWS..."
+     - aws sts get-caller-identity
+     
+     - echo "Assuming role for ${ENVIRONMENT} environment..."
+     - |
+       if [[ "${ENVIRONMENT}" == "dev" ]]; then
+         export DEPLOYMENT_ROLE_ARN="arn:aws:iam::767397709508:role/pw-role-dev-crossaccount_infra_role"
+       elif [[ "${ENVIRONMENT}" == "uat" ]]; then
+         export DEPLOYMENT_ROLE_ARN="arn:aws:iam::891377117055:role/pw-role-uat-crossaccount_infra_role"
+       elif [[ "${ENVIRONMENT}" == "prod" ]]; then
+         export DEPLOYMENT_ROLE_ARN="arn:aws:iam::123456789012:role/pw-role-prod-crossaccount_infra_role"
+       else
+         echo "Unknown environment: ${ENVIRONMENT}"
+         exit 1
+       fi
+     
+     - CREDENTIALS=$(aws sts assume-role --role-arn ${DEPLOYMENT_ROLE_ARN} --role-session-name AmplifyDeploySession --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
+     - export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | cut -d' ' -f1)
+     - export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | cut -d' ' -f2)
+     - export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | cut -d' ' -f3)
+     
+     - echo "Logging in to AWS to verify assumed role..."
+     - aws sts get-caller-identity
+
+     # Deploying to amplify
+
+     - echo "Amplify App Name = $AMPLIFY_APP_NAME"
+
+     # List available Amplify apps
+     - echo "Available Amplify Apps:"
+     - aws amplify list-apps --query 'apps[*].name' --output text
+
+     # Retrieve Amplify App ID using the name
+     - AMPLIFY_APP_ID=$(aws amplify list-apps --query "apps[?name=='$AMPLIFY_APP_NAME'].appId" --output text)
+
+     # Print App ID
+     - echo "Retrieved App ID $AMPLIFY_APP_ID"
+
+      # Verify Branch Existence
+     - aws amplify list-branches --app-id $AMPLIFY_APP_ID
+
+      # Branch 
+     - echo $BRANCH_NAME
+
+
+     
+
+     # Deploying to the Amplify
+
+
+     - echo "Triggering Amplify deployment for App ID $AMPLIFY_APP_ID, Branch $BRANCH_NAME"
+     - START_JOB_OUTPUT=$(aws amplify start-job --app-id $AMPLIFY_APP_ID --branch-name $BRANCH_NAME --job-type RELEASE)
+     - JOB_ID=$(echo "$START_JOB_OUTPUT" | jq -r '.jobSummary.jobId')
+     
+     - echo "Monitoring deployment status for Job ID $JOB_ID"
+     - |
+       while true; do
+         JOB_STATUS=$(aws amplify get-job --app-id $AMPLIFY_APP_ID --branch-name $BRANCH_NAME --job-id $JOB_ID --query 'job.summary.status' --output text)
+         
+         echo "Current job status: $JOB_STATUS"
+         
+         if [ "$JOB_STATUS" == "SUCCEED" ]; then
+           echo "Deployment successful"
+           break
+         elif [ "$JOB_STATUS" == "FAILED" ]; then
+           echo "Deployment failed"
+           exit 1
+         elif [ "$JOB_STATUS" == "CANCELLING" ] || [ "$JOB_STATUS" == "CANCELLED" ]; then
+           echo "Deployment cancelled"
+           exit 1
+         fi
+         
+         sleep 30
+       done
+
+      
+     
+    #  # Trigger Amplify deployment
+    #  - aws amplify start-job 
+    #    --app-id $AMPLIFY_APP_ID 
+    #    --branch-name $BRANCH_NAME 
+    #    --job-type RELEASE
+     
+    #  # Wait for job completion
+    #  - |
+    #    job_id=$(aws amplify list-jobs 
+    #      --app-id $AMPLIFY_APP_ID 
+    #      --branch-name $BRANCH_NAME 
+    #      --query 'jobSummaries[0].jobId' 
+    #      --output text)
+
+    #    echo job ID is $job_id
+       
+    #    timeout=180  # 3 minutes timeout
+    #    start_time=$(date +%s)
+       
+    #    while true; do
+    #      current_time=$(date +%s)
+    #      elapsed=$((current_time - start_time))
+         
+    #      if [ $elapsed -gt $timeout ]; then
+    #        echo "Deployment timeout exceeded"
+    #        exit 1
+    #      fi
+         
+    #      job_status=$(aws amplify get-job 
+    #        --app-id $AMPLIFY_APP_ID 
+    #        --branch-name $BRANCH_NAME 
+    #        --job-id $job_id 
+    #        --query 'job.summary.status' 
+    #        --output text)
+         
+    #      case $job_status in
+    #        "SUCCEED")
+    #          echo "Amplify deployment successful"
+    #          exit 0
+    #          ;;
+    #        "FAILED")
+    #          echo "Amplify deployment failed"
+    #          exit 1
+    #          ;;
+    #        *)
+    #          echo "Current job status: $job_status"
+    #          sleep 10
+    #          ;;
+    #      esac
+    #    done
+
+# version: 0.2
+# phases:
+#   build:
+#     commands:
+#       - echo "Logging in to AWS..."
+#       - aws sts get-caller-identity
+      
+#       - echo "Assuming role for ${ENVIRONMENT} environment..."
+#       - |
+#         if [[ "${ENVIRONMENT}" == "dev" ]]; then
+#           export DEPLOYMENT_ROLE_ARN="arn:aws:iam::767397709508:role/pw-role-dev-crossaccount_infra_role"
+#         elif [[ "${ENVIRONMENT}" == "uat" ]]; then
+#           export DEPLOYMENT_ROLE_ARN="arn:aws:iam::891377117055:role/pw-role-uat-crossaccount_infra_role"
+#         elif [[ "${ENVIRONMENT}" == "prod" ]]; then
+#           export DEPLOYMENT_ROLE_ARN="arn:aws:iam::123456789012:role/pw-role-prod-crossaccount_infra_role"
+#         else
+#           echo "Unknown environment: ${ENVIRONMENT}"
+#           exit 1
+#         fi
+      
+#       - CREDENTIALS=$(aws sts assume-role --role-arn ${DEPLOYMENT_ROLE_ARN} --role-session-name AmplifyDeploySession --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' --output text)
+#       - export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | cut -d' ' -f1)
+#       - export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | cut -d' ' -f2)
+#       - export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | cut -d' ' -f3)
+      
+#       - echo "Logging in to AWS to verify assumed role..."
+#       - aws sts get-caller-identity
+
+#       # Deploying to amplify
+
+#       - echo "Amplify App Name = $AMPLIFY_APP_NAME"
+
+#       # Retrieve Amplify App ID using the name
+#       - aws amplify list-apps
+#       # Try a more comprehensive query
+#       - aws amplify list-apps --query 'apps[*]' --output json
+
+#       - AMPLIFY_APP_ID=$(aws amplify list-apps --query "apps[?name=='$AMPLIFY_APP_NAME'].appId" --output text)
+
+#       # Print App ID
+#       - echo "Retrieved App ID $AMPLIFY_APP_ID"
+
+#       # Verify Branch Existence
+#       - aws amplify list-branches --app-id $AMPLIFY_APP_ID
+
+#       # Branch 
+#       - echo $BRANCH_NAME
+      
+#       # Trigger Amplify deployment
+#       - aws amplify start-job 
+#         --app-id $AMPLIFY_APP_ID 
+#         --branch-name $BRANCH_NAME 
+#         --job-type RELEASE
+      
+#       # Wait for job completion
+#       - |
+#         job_id=$(aws amplify list-jobs 
+#           --app-id $AMPLIFY_APP_ID 
+#           --branch-name $BRANCH_NAME 
+#           --query 'jobSummaries[0].jobId' 
+#           --output text)
+        
+#         timeout=1800  # 30 minutes timeout
+#         start_time=$(date +%s)
+        
+#         while true; do
+#           current_time=$(date +%s)
+#           elapsed=$((current_time - start_time))
+          
+#           if [ $elapsed -gt $timeout ]; then
+#             echo "Deployment timeout exceeded"
+#             exit 1
+#           fi
+          
+#           job_status=$(aws amplify get-job 
+#             --app-id $AMPLIFY_APP_ID 
+#             --branch-name $BRANCH_NAME 
+#             --job-id $job_id 
+#             --query 'job.summary.status' 
+#             --output text)
+          
+#           case $job_status in
+#             "SUCCEED")
+#               echo "Amplify deployment successful"
+#               exit 0
+#               ;;
+#             "FAILED")
+#               echo "Amplify deployment failed"
+#               exit 1
+#               ;;
+#             *)
+#               echo "Current job status: $job_status"
+#               sleep 30
+#               ;;
+#           esac
+#         done

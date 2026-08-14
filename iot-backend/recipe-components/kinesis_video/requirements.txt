@@ -1,0 +1,6 @@
+boto3
+awscrt
+awsiotsdk
+botocore
+requests
+pgi

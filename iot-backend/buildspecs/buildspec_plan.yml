@@ -1,0 +1,63 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Downloading and installing Terraform..."
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip
+      - unzip terraform.zip
+      - mv terraform /usr/local/bin/
+      - terraform --version  # Verify Terraform installation
+      - echo "Installing required tools..."
+      - pip install awscli
+            
+  pre_build:
+    commands:
+      - echo "Terraform execution started on `date`"
+      - echo "Current working directory $(pwd)"
+      - ls -la
+      - echo "Setting up environment..."
+      - export TF_VAR_region=$AWS_DEFAULT_REGION
+      - echo "Starting pre-build phase" " Validating Terraform code..." ##
+      - terraform init -backend=false  ##
+      - terraform validate  ##
+      - terraform fmt || echo "Formatting applied" ##
+    
+  build:
+    commands:
+      - ls -la
+      - echo "Copying backend configuration"
+      - cp $ENV_DIR/backend.tf .
+      - ls
+      #- cat backend.tf
+      ##- echo "Running security checks..." ####
+      # Check for hardcoded secrets using TruffleHog
+      ##- git init
+      ##- echo "Checking for hardcoded secrets..."
+      ##- trufflehog --regex --entropy=False .
+
+      # Scan for Terraform security issues using Checkov
+      ##- echo "Scanning for security misconfigurations with Checkov..."
+      ##- checkov -d .
+
+      # Scan for Terraform vulnerabilities using tfsec
+      ##- echo "Scanning for vulnerabilities with tfsec..."
+      ##- tfsec .
+
+      ##- terraform init
+
+      ##- echo "Running terraform plan for additional validation..."
+      ##- terraform plan -var-file=$ENV_DIR/terraform.tfvars -out=tfplan.binary ####
+      - terraform init
+      - terraform plan -var-file=$ENV_DIR/terraform.tfvars -out=tfplan
+      
+           
+artifacts:
+  files:
+    - $ENV_DIR/**/*
+    #- "**/*"
+  name: terraform-plan-output
+
+cache:
+  paths:
+    - "**/*"

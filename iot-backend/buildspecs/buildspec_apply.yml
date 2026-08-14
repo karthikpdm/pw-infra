@@ -1,0 +1,69 @@
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Downloading and installing Terraform..."
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.8.5/terraform_1.8.5_linux_amd64.zip
+      - unzip terraform.zip
+      - mv terraform /usr/local/bin/
+      - terraform --version  # Verify Terraform installation
+      #- yum install -y jq
+            
+  pre_build:
+    commands:
+      - echo "Terraform execution started on `date`"
+      - echo "Current working directory $(pwd)"
+      - ls -la
+      - echo "Setting up environment..."
+      - export TF_VAR_region=$AWS_DEFAULT_REGION  
+      - echo "Terraform execution started on `date`"
+      - echo "Current working directory $(pwd)"
+      - ls -la
+      - echo "Setting up environment..."
+      - export TF_VAR_region=$AWS_DEFAULT_REGION
+      - echo "Assuming cross-account role in destination account"
+      - |
+        ROLE_ARN_DEST="arn:aws:iam::767397709508:role/pw-role-dev-crossaccount_infra_role"
+        CREDS_DEST=$(aws sts assume-role --role-arn $ROLE_ARN_DEST --role-session-name CodeBuildSession)
+        export AWS_ACCESS_KEY_ID=$(echo $CREDS_DEST | jq -r '.Credentials.AccessKeyId')
+        export AWS_SECRET_ACCESS_KEY=$(echo $CREDS_DEST | jq -r '.Credentials.SecretAccessKey')
+        export AWS_SESSION_TOKEN=$(echo $CREDS_DEST | jq -r '.Credentials.SessionToken')
+      - echo "Uploading recipe component files to S3 bucket"
+      - aws s3 cp recipe-components/ s3://gentelemetry-components-artifacts/recipe-components/ --recursive
+      - echo "Files uploaded successfully"
+
+      - echo "Assuming role in source account for Terraform S3 backend access"
+      - |
+        ROLE_ARN_SOURCE="arn:aws:iam::339713024244:role/pw-role-codebuild-infra_role"
+        CREDS_SOURCE=$(aws sts assume-role --role-arn $ROLE_ARN_SOURCE --role-session-name TerraformSession)
+        export AWS_ACCESS_KEY_ID=$(echo $CREDS_SOURCE | jq -r '.Credentials.AccessKeyId')
+        export AWS_SECRET_ACCESS_KEY=$(echo $CREDS_SOURCE | jq -r '.Credentials.SecretAccessKey')
+        export AWS_SESSION_TOKEN=$(echo $CREDS_SOURCE | jq -r '.Credentials.SessionToken')
+      
+      
+            
+  build:
+    commands:
+      - ls -la
+      #- echo "Uploading recipe component files to S3 bucket"
+      #- aws s3 cp recipe-components/ s3://gentelemetry-components-artifacts/recipe-components/ --recursive
+      #- echo "Files uploaded successfully"
+      - echo "Copying backend configuration"
+      - cp $ENV_DIR/backend.tf .
+      - ls
+      - cat backend.tf
+      - terraform init
+      - terraform apply -auto-approve -var-file=$ENV_DIR/terraform.tfvars
+      - echo "Contents of current directory:"
+      - ls -la
+       
+artifacts:
+  files:
+    - $ENV_DIR/**/*
+    #- component_check.json
+  name: terraform-plan-output
+
+cache:
+  paths:
+    - "**/*"

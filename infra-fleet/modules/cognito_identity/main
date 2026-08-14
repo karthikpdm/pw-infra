@@ -1,0 +1,54 @@
+# Fetch the existing IAM role by name
+data "aws_iam_role" "identity_pool_role" {
+  name = var.identity_pool_role_name
+}
+
+# Define the Cognito Identity Pool
+resource "aws_cognito_identity_pool" "gen_telemetry_identity_pool" {
+  identity_pool_name               = var.identity_pool_name
+  allow_unauthenticated_identities = var.allow_unauthenticated_identities
+  tags                             = var.tags
+}
+
+# Attach the IAM role to the Cognito Identity Pool for authenticated and unauthenticated users
+resource "aws_cognito_identity_pool_roles_attachment" "identity_pool_roles" {
+  identity_pool_id = aws_cognito_identity_pool.gen_telemetry_identity_pool.id
+
+  roles = {
+    "authenticated"   = data.aws_iam_role.identity_pool_role.arn
+    "unauthenticated" = data.aws_iam_role.identity_pool_role.arn
+  }
+}
+
+################## CloudWatch ###########
+data "aws_caller_identity" "current" {}
+
+resource "aws_cloudwatch_log_group" "cognito_identity_pool_log_group" {
+  name              = "/aws/cognito/identity_pool/${var.identity_pool_name}"
+  retention_in_days = var.log_retention_days  # Define retention in your variables
+  tags              = var.tags
+}
+
+resource "aws_iam_policy" "cognito_cloudwatch_logging_policy" {
+  name   = "${var.identity_pool_name}_CloudWatchLoggingPolicy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = "arn:aws:logs:${var.region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/cognito/identity_pool/${var.identity_pool_name}*"
+      }
+    ]
+  })
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy_attachment" "cognito_cloudwatch_logging_attachment" {
+  role       = data.aws_iam_role.identity_pool_role.name
+  policy_arn = aws_iam_policy.cognito_cloudwatch_logging_policy.arn
+}

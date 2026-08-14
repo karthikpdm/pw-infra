@@ -1,0 +1,370 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: VPC with public and private subnets, NAT Gateway, EC2 instance, and EKS cluster
+ 
+Resources:
+  ## VPC
+  PubPrivateVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: intel-iot-test-vpc      
+ 
+  ## SUBNETS    
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: us-east-2a
+      CidrBlock: 10.0.128.0/18
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: kubernetes.io/cluster/intel-iot-test
+          Value: shared
+ 
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: us-east-2b
+      CidrBlock: 10.0.192.0/18
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: kubernetes.io/cluster/intel-iot-test
+          Value: shared
+ 
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: us-east-2a
+      CidrBlock: 10.0.0.0/18
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+        - Key: kubernetes.io/cluster/intel-iot-test
+          Value: shared
+ 
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      AvailabilityZone: us-east-2b
+      CidrBlock: 10.0.64.0/18
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: kubernetes.io/role/internal-elb
+          Value: 1
+        - Key: kubernetes.io/cluster/intel-iot-test
+          Value: shared
+ 
+  ## INTERNET GATEWAY
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+ 
+  GatewayToInternet:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+      InternetGatewayId: !Ref InternetGateway
+ 
+  ## PUBLIC ROUTING
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+ 
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayToInternet
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+ 
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+ 
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+ 
+  ## NAT GATEWAY
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    DependsOn: NatPublicIP
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      AllocationId: !GetAtt NatPublicIP.AllocationId
+ 
+  ## ELASTIC IP
+  NatPublicIP:
+    Type: AWS::EC2::EIP
+    DependsOn: PubPrivateVPC
+    Properties:
+      Domain: vpc
+ 
+  ## PRIVATE ROUTING
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref PubPrivateVPC
+ 
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      NatGatewayId: !Ref NatGateway
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+ 
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+ 
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+ 
+  ## SECURITY GROUP FOR EKS
+  EKSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group for EKS Cluster"
+      VpcId: !Ref PubPrivateVPC
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 10.0.0.0/16  # Allow all traffic from within the VPC
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0  # Allow all outbound traffic
+ 
+  ## EKS CLUSTER ROLE
+  EKSClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - eks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+        - arn:aws:iam::aws:policy/AmazonEKSServicePolicy
+ 
+  ## EKS CLUSTER
+  EKSCluster:
+    Type: AWS::EKS::Cluster
+    Properties:
+      Name: intel-iot-test
+      RoleArn: !GetAtt EKSClusterRole.Arn
+      ResourcesVpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref EKSSecurityGroup
+ 
+  ## EKS NODE GROUP ROLE
+  EKSNodeGroupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+ 
+  ## EKS NODE GROUP LAUNCH TEMPLATE
+  EKSNodeGroupLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${AWS::StackName}-node-group-launch-template
+      LaunchTemplateData:
+        InstanceType: t3.medium
+        BlockDeviceMappings:
+          - DeviceName: /dev/xvda
+            Ebs:
+              VolumeSize: 20
+              VolumeType: gp2
+        SecurityGroupIds:
+          - !Ref EKSSecurityGroup
+ 
+  ## EKS NODE GROUP
+  EKSNodeGroup:
+    Type: AWS::EKS::Nodegroup
+    DependsOn: EKSCluster
+    Properties:
+      ClusterName: !Ref EKSCluster
+      NodegroupName: intel-iot-test-nodegroup
+      NodeRole: !GetAtt EKSNodeGroupRole.Arn
+      ScalingConfig:
+        MinSize: 1
+        DesiredSize: 1
+        MaxSize: 3
+      Subnets:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+      LaunchTemplate:
+        Id: !Ref EKSNodeGroupLaunchTemplate
+        Version: !GetAtt EKSNodeGroupLaunchTemplate.LatestVersionNumber
+      ForceUpdateEnabled: true
+ 
+Outputs:
+  VPCId:
+    Description: VPC ID
+    Value: !Ref PubPrivateVPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCID"
+ 
+  EKSClusterName:
+    Description: EKS Cluster Name
+    Value: !Ref EKSCluster
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSClusterName"
+ 
+  EKSNodeGroupName:
+    Description: EKS Node Group Name
+    Value: !Ref EKSNodeGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-EKSNodeGroupName"
+ 
+ AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CodePipeline for EKS cluster deployment with updated configuration'
+ 
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+     
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSCodePipelineFullAccess
+        - arn:aws:iam::aws:policy/AWSCloudFormationFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketVersioning
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt ArtifactBucket.Arn
+                  - !Sub ${ArtifactBucket.Arn}/*
+     
+  CloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+ 
+  EKSDeploymentPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      RoleArn: !GetAtt PipelineRole.Arn
+      ArtifactStore:
+        Type: S3
+        Location: !Ref ArtifactBucket
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: '1'
+                Provider: CodeStarSourceConnection
+              Configuration:
+                ConnectionArn: arn:aws:codestar-connections:us-east-2:619071348606:connection/0b943876-1dc0-4e2b-807a-491906618b56
+                FullRepositoryId: IOI_Projects/aws-configurations  
+                BranchName: Dev
+                OutputArtifactFormat: CODE_ZIP
+              OutputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+             
+        - Name: Deploy
+          Actions:
+            - Name: CreateEKSCluster
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: '1'
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                RoleArn: !GetAtt CloudFormationRole.Arn
+                StackName: intel-iot-dev-cluster
+                TemplatePath: SourceOutput::eks-cluster/eks-dev-cluster.yaml
+                Capabilities: CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND
+              InputArtifacts:
+                - Name: SourceOutput
+              RunOrder: 1
+ 
+Outputs:
+  PipelineURL:
+    Description: CodePipeline URL
+    Value: !Sub https://console.aws.amazon.com/codepipeline/home?region=${AWS::Region}#/view/${EKSDeploymentPipelin…
+ 
+  ArtifactBucketName:
+    Description: S3 Bucket for Pipeline Artifacts
+    Value: !Ref ArtifactBucket
+ 

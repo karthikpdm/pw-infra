@@ -1,0 +1,70 @@
+
+version: 0.2
+
+phases:
+  install:
+    commands:
+      - echo "Downloading and installing Terraform..."
+      - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.9.3/terraform_1.9.3_linux_amd64.zip
+      - unzip terraform.zip
+      - mv terraform /usr/local/bin/
+      - terraform --version  # Verify Terraform installation
+
+  pre_build:
+    commands:
+      - echo "Removing Digest from DynamoDB to resolve state checksum mismatch..."
+      - > 
+        aws dynamodb update-item --table-name pw_dynamodb_terraform_statelock
+        --key "{\"LockID\": {\"S\": \"pw-s3-terraform-backend/pipeline/pipeline_infra/terraform.tfstate\"}}"
+        --update-expression "REMOVE Digest" 
+        --region us-east-1
+      - terraform init
+
+  build:
+    commands:
+      - echo "Running Terraform Plan"
+      - terraform plan -out=tfplan
+      # - terraform apply -auto-approve
+
+artifacts:
+  files:
+    - '**/*'
+  name: pipeline-infra-$(date +%Y-%m-%d)
+  discard-paths: no
+
+
+
+# version: 0.2
+
+# phases:
+#   install:
+#     commands:
+#       - echo "Downloading and installing Terraform..."
+#       - curl -o terraform.zip https://releases.hashicorp.com/terraform/1.9.3/terraform_1.9.3_linux_amd64.zip
+#       - unzip terraform.zip
+#       - mv terraform /usr/local/bin/
+#       # - sudo yum install -y yum-utils shadow-utils
+#       # - sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+#       # - sudo yum -y install terraform
+#       - terraform --version  # Verify Terraform installation
+
+      
+
+#   pre_build:
+#     commands:
+#       - terraform init
+#   build:
+#     commands:
+#       - echo "Running Terraform Plan"
+      
+#       - terraform plan  -out=tfplan
+
+#       - terraform apply -auto-approve
+
+
+
+# artifacts:
+#   files:
+#     - '**/*'
+#   name: pipeline-infra-$(date +%Y-%m-%d)
+#   discard-paths: no

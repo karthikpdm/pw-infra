@@ -1,0 +1,11 @@
+# modules/cognito_identity/outputs.tf
+
+output "identity_pool_id" {
+  description = "The ID of the Cognito Identity Pool"
+  value       = aws_cognito_identity_pool.gen_telemetry_identity_pool.id
+}
+
+output "identity_pool_arn" {
+  description = "The ARN of the Cognito Identity Pool"
+  value       = aws_cognito_identity_pool.gen_telemetry_identity_pool.arn
+}

@@ -1,0 +1,143 @@
+{
+    "Comment": "Dossier to S3 Data Lake Ingestion Workflow with Auditing",
+    "StartAt": "audit-start",
+    "States": {
+      "audit-start": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {
+          "FunctionName": "${audit_lambda_name}",
+          "Payload": {
+            "workflowName": "sf-pw-dossier-workflow",
+            "workflow_start_time.$": "$$.State.EnteredTime",
+            "source_system": "Dossier",
+            "target_system": "S3",
+            "layer": "Raw",
+            "ExecutionName.$": "$$.Execution.Name"
+          }
+        },
+        "ResultPath": "$.auditStart",
+        "Next": "lambda-identify-unique-dossier-schemas"
+      },
+      "lambda-identify-unique-dossier-schemas": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {
+          "FunctionName": "${all_datasources_lambda_name}",
+          "Payload.$": "$"
+        },
+        "ResultPath": "$",
+        "Next": "update-lambda-details",
+        "Catch": [
+          {
+            "ErrorEquals": ["States.ALL"],
+            "ResultPath": "$.error",
+            "Next": "notify-failure"
+          }
+        ]
+      },
+      "update-lambda-details": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {
+          "FunctionName": "${audit_lambda_name}",
+          "Payload": {
+            "lambda_function_name": "${all_datasources_lambda_name}",
+            "ExecutionName.$": "$$.Execution.Name",
+            "schema_list.$": "$.Payload.body.schemas"
+          }
+        },
+        "ResultPath": "$.lambdaInfo",
+        "Next": "map-process-dossier-schemas"
+      },
+      "map-process-dossier-schemas": {
+        "Type": "Map",
+        "ItemsPath": "$.Payload.body.schemas",
+        "MaxConcurrency": 30,
+        "Iterator": {
+          "StartAt": "ingest-dossier-s3-glue-job",
+          "States": {
+            "ingest-dossier-s3-glue-job": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:::glue:startJobRun.sync",
+              "Parameters": {
+                "JobName": "${glue_dossier_delta_load_job_name}",
+                "Arguments": {
+                  "--enable-glue-datacatalog": "true",
+                  "--job-language": "python",
+                  "--SCHEMA_NAME.$": "$",
+                  "--SNS_SUCCESS_TOPIC_ARN": "${dossier_success_topic_arn}",
+                  "--SNS_FAILURE_TOPIC_ARN": "${dossier_failure_topic_arn}"
+                }
+              },
+              "End": true
+            }
+          }
+        },
+        "Next": "GetSchemaCounts",
+        "Catch": [
+          {
+            "ErrorEquals": ["States.ALL"],
+            "ResultPath": "$.error",
+            "Next": "notify-failure"
+          }
+        ]
+      },
+      "GetSchemaCounts": {
+        "Type": "Task",
+        "Resource": "${all_datasources_lambda_arn}",
+        "Parameters": {
+          "Payload.$": "$"
+        },
+        "ResultPath": "$",
+        "Next": "update-gluejob-details"
+      },
+      "update-gluejob-details": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {
+          "FunctionName": "${audit_lambda_name}",
+          "Payload": {
+            "gluejob_name": "${amcs_data_ingestion_glue_name}",
+            "ExecutionName.$": "$$.Execution.Name",
+            "schema_counts.$": "$.body.counts",
+            "time_taken_for_workflow_execution.$": "$.body.time"
+          }
+        },
+        "Next": "audit-end"
+      },
+      "audit-end": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::lambda:invoke",
+        "Parameters": {
+          "FunctionName": "${audit_lambda_name}",
+          "Payload": {
+            "ExecutionName.$": "$$.Execution.Name",
+            "workflow_end_time.$": "$$.State.EnteredTime",
+            "workflow_status": "SUCCESS"
+          }
+        },
+        "Next": "success-notification"
+      },
+      "success-notification": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "TopicArn": "${dossier_success_topic_arn}",
+          "Subject": "Dossier to S3 Data Lake Ingestion: Success",
+          "Message": "All Dossier schemas successfully ingested to S3 Data Lake"
+        },
+        "End": true
+      },
+      "notify-failure": {
+        "Type": "Task",
+        "Resource": "arn:aws:states:::sns:publish",
+        "Parameters": {
+          "TopicArn": "${dossier_failure_topic_arn}",
+          "Subject.$": "States.Format('Dossier to S3 Data Lake Ingestion: Failure in {}', $.error.Error)",
+          "Message.$": "States.Format('An error occurred during the {} step: {}', $.error.Error, $.error.Cause)"
+        },
+        "End": true
+      }
+    }
+  }

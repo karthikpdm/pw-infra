@@ -1,0 +1,64 @@
+{    
+  "RecipeFormatVersion": "2020-01-25",
+  "ComponentName": "com.stream.kvsComponent",
+  "ComponentVersion": "1.0.0",
+  "ComponentType": "aws.greengrass.generic",
+  "ComponentDescription": "AWS KVS SOLUTION + SHADOW COMMANDS",
+  "ComponentPublisher": "Sri",
+  "ComponentDependencies": {
+    "aws.greengrass.TokenExchangeService": {
+      "VersionRequirement": ">=2.0.0 <3.0.0",
+      "DependencyType": "HARD"
+    }
+  },
+  "Manifests": [
+    {
+      "Platform": {
+        "os": "linux"
+      },
+      "Name": "Linux",
+      "Lifecycle": {
+        "Install": {
+          "Script": "python3 -m venv {work:path}/.venv && . {work:path}/.venv/bin/activate && pip install pip --upgrade && pip install wheel && pip install -r {artifacts:path}/requirements.txt"
+        },
+        "Run": {
+          "RequiresPrivilege": "true",
+          "Script": "chmod +x {artifacts:path}/cmd.sh && {artifacts:path}/cmd.sh && . {work:path}/.venv/bin/activate && python3 -u {artifacts:path}/kvsShadowss.py"
+        }
+      },
+      "Artifacts": [
+        {
+          "Uri": "s3://gentelemetry-components-artifacts/recipe-components/kinesis_video/kvsShadowss.py",
+        
+          "Algorithm": "SHA-256",
+          "Unarchive": "NONE",
+          "Permission": {
+            "Read": "OWNER",
+            "Execute": "NONE"
+          }
+        },
+        {
+          "Uri": "s3://gentelemetry-components-artifacts/recipe-components/kinesis_video/requirements.txt",
+         
+          "Algorithm": "SHA-256",
+          "Unarchive": "NONE",
+          "Permission": {
+            "Read": "OWNER",
+            "Execute": "NONE"
+          }
+        },
+        {
+          "Uri": "s3://gentelemetry-components-artifacts/recipe-components/kinesis_video/cmd.sh",
+         
+          "Algorithm": "SHA-256",
+          "Unarchive": "NONE",
+          "Permission": {
+            "Read": "OWNER",
+            "Execute": "OWNER"
+          }
+        }
+      ]
+    }
+  ],
+  "Lifecycle": {}
+}

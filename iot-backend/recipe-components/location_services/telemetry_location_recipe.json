@@ -1,0 +1,53 @@
+{
+    "RecipeFormatVersion": "2020-01-25",
+    "ComponentName": "com.example.telemetryComponent",
+    "ComponentVersion": "1.0.95",
+    "ComponentType": "aws.greengrass.generic",
+    "ComponentDescription": "AWS LOCATION SERVICES + SHADOW COMMANDS",
+    "ComponentPublisher": "Sri",
+    "ComponentDependencies": {
+      "aws.greengrass.TokenExchangeService": {
+        "VersionRequirement": ">=2.0.0 <3.0.0",
+        "DependencyType": "HARD"
+      }
+    },
+    "Manifests": [
+      {
+        "Platform": {
+          "os": "linux"
+        },
+        "Name": "Linux",
+        "Lifecycle": {
+          "Install": {
+            "Script": "pip3 install -r {artifacts:path}/requirements.txt --break-system-packages"
+          },
+          "Run": {
+            "Script": "python3 -u {artifacts:path}/telemetry_location.py"
+          }
+        },
+        "Artifacts": [
+          {
+            "Uri": "s3://gentelemetry-components-artifacts/recipe-components/location_services/telemetry_location.py",
+           
+            "Algorithm": "SHA-256",
+            "Unarchive": "NONE",
+            "Permission": {
+              "Read": "OWNER",
+              "Execute": "NONE"
+            }
+          },
+          {
+            "Uri": "s3://gentelemetry-components-artifacts/recipe-components/location_services/requirements.txt",
+           
+            "Algorithm": "SHA-256",
+            "Unarchive": "NONE",
+            "Permission": {
+              "Read": "OWNER",
+              "Execute": "NONE"
+            }
+          }
+        ]
+      }
+    ],
+    "Lifecycle": {}
+  }

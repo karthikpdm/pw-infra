@@ -1,0 +1,14 @@
+
+modules/target/original-priority-1.0-SNAPSHOT.jar
+modules/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+modules/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst
+modules/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/createdFiles.lst
+modules/target/maven-status/maven-compiler-plugin/testCompile/default-testCompile/inputFiles.lst
+modules/target/maven-archiver/pom.properties
+modules/.idea/compiler.xml
+modules/.idea/encodings.xml
+modules/.idea/jarRepositories.xml
+modules/.idea/misc.xml
+modules/.idea/vcs.xml
+modules/target/classes/com/pw/lambda/EnableEventBridge.class
+
